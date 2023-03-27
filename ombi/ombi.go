@@ -47,8 +47,8 @@ func (client *OmbiClient) PerformMultiSearch(query string) ([]MultiSearchResult,
 
 	log.Printf("Response status: %s, response body: %s", resp.Status, string(body))
 
-	result := make([]MultiSearchResult, 20)
-	if json.Unmarshal(body, &result) != nil {
+	var result []MultiSearchResult
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("Can't decode JSON response: %w", err)
 	}
 
@@ -68,19 +68,23 @@ func (client *OmbiClient) post(path string, body any) (*http.Response, error) {
 		return nil, fmt.Errorf("Can't create POST request %s from client %+v: %w", url, client, err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("ApiKey", client.key)
 
 	log.Printf("POST %s with body %s", url, string(requestBody))
 
-	return http.DefaultClient.Do(request)
+	return client.doRequest(request)
+}
+
+func (client *OmbiClient) doRequest(req *http.Request) (*http.Response, error) {
+	req.Header.Set("ApiKey", client.key)
+	return http.DefaultClient.Do(req)
 }
 
 type MultiSearchResult struct {
-	id        int
-	mediaType string
-	title     string
-	poster    string
-	overview  string
+	Id        string `json:"id"`
+	MediaType string `json:"mediaType"`
+	Title     string `json:"title"`
+	Poster    string `json:"poster"`
+	Overview  string `json:"overview"`
 }
 
 type MulitSearchRequest struct {
