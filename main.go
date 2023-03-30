@@ -3,14 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/kirmanak/ombibot-go/bot"
+	"github.com/kirmanak/ombibot-go/ombi"
+	"github.com/kirmanak/ombibot-go/storage"
 	"log"
 	"os"
 	"strconv"
-	"database/sql"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	bot "github.com/kirmanak/ombibot-go/bot"
-	ombi "github.com/kirmanak/ombibot-go/ombi"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -25,21 +25,19 @@ func main() {
 		log.Panic(err)
 	}
 
-	db, err := sql.Open("sqlite3", "./ombibot.db")
+	storage, err := storage.NewStorage()
 	if err != nil {
 		log.Panic(err)
 	}
 
-	defer db.Close()
-
-	db.Exec("CREATE TABLE IF NOT EXISTS search_results (uuid TEXT PRIMARY KEY, results TEXT)")
+	defer storage.Close()
 
 	tgbot.Debug = true
 	log.Printf("Authorized on account %s", tgbot.Self.UserName)
 
 	ombiClient := ombi.NewOmbiClient(configuration.OmbiUrl, configuration.OmbiKey)
-	
-	bot := bot.NewBot(tgbot, ombiClient, configuration.PosterBasePath, db)
+
+	bot := bot.NewBot(tgbot, ombiClient, configuration.PosterBasePath, storage)
 	bot.Start(configuration.UpdateId)
 }
 
@@ -76,10 +74,10 @@ func parse_configuration() (Configuration, error) {
 	}
 
 	configuration := Configuration{
-		ApiToken:         apiToken,
-		UpdateId:         update_id_int,
-		OmbiUrl:          ombi_url,
-		OmbiKey:          ombi_key,
+		ApiToken:       apiToken,
+		UpdateId:       update_id_int,
+		OmbiUrl:        ombi_url,
+		OmbiKey:        ombi_key,
 		PosterBasePath: poster_base_path,
 	}
 
