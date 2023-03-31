@@ -16,27 +16,40 @@ import (
 func main() {
 	configuration, err := parse_configuration()
 	if err != nil {
-		log.Panic(err)
-	}
-
-	tgbot, err := tgbotapi.NewBotAPI(configuration.ApiToken)
-	if err != nil {
-		log.Panic(err)
+		log.Fatalf("failed to parse configuration: %s", err)
 	}
 
 	storage, err := storage.NewStorage()
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("failed to open storage: %s", err)
 	}
 
 	defer storage.Close()
 
+	users, err := storage.GetUsers()
+	if err != nil {
+		log.Fatalf("failed to get users: %s", err)
+	}
+
+	if len(users) == 0 {
+		log.Fatalf("no users found")
+	}
+
+	tgbot, err := tgbotapi.NewBotAPI(configuration.ApiToken)
+	if err != nil {
+		log.Fatalf("failed to create bot: %s", err)
+	}
+
 	tgbot.Debug = true
 	log.Printf("Authorized on account %s", tgbot.Self.UserName)
 
-	ombiClient := ombi.NewOmbiClient(configuration.OmbiUrl, configuration.OmbiKey)
+	ombiClients := make(map[int64]ombi.OmbiClient)
+	for _, user := range users {
+		ombiClient := ombi.NewOmbiClient(user.OmbiUrl, user.OmbiKey)
+		ombiClients[user.Id] = ombiClient
+	}
 
-	bot := bot.NewBot(tgbot, ombiClient, configuration.PosterBasePath, storage)
+	bot := bot.NewBot(tgbot, ombiClients, configuration.PosterBasePath, storage)
 	bot.Start(configuration.UpdateId)
 }
 
@@ -57,16 +70,6 @@ func parse_configuration() (*Configuration, error) {
 		return nil, fmt.Errorf("TELEGRAM_UPDATE_ID is not an integer: %w", err)
 	}
 
-	ombi_url := os.Getenv("OMBI_URL")
-	if ombi_url == "" {
-		return nil, fmt.Errorf("OMBI_URL is not set")
-	}
-
-	ombi_key := os.Getenv("OMBI_KEY")
-	if ombi_key == "" {
-		return nil, fmt.Errorf("OMBI_KEY is not set")
-	}
-
 	poster_base_path := os.Getenv("POSTER_BASE_PATH")
 	if poster_base_path == "" {
 		return nil, fmt.Errorf("POSTER_BASE_PATH is not set")
@@ -75,8 +78,6 @@ func parse_configuration() (*Configuration, error) {
 	configuration := Configuration{
 		ApiToken:       apiToken,
 		UpdateId:       update_id_int,
-		OmbiUrl:        ombi_url,
-		OmbiKey:        ombi_key,
 		PosterBasePath: poster_base_path,
 	}
 
@@ -88,7 +89,5 @@ func parse_configuration() (*Configuration, error) {
 type Configuration struct {
 	ApiToken       string
 	UpdateId       int
-	OmbiUrl        string
-	OmbiKey        string
 	PosterBasePath string
 }

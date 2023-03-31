@@ -21,15 +21,15 @@ const (
 
 type Bot struct {
 	tgbot          *tgbotapi.BotAPI
-	ombiClient     ombi.OmbiClient
+	ombiClients    map[int64]ombi.OmbiClient
 	posterBasePath string
 	storage        storage.Storage
 }
 
-func NewBot(tgbot *tgbotapi.BotAPI, ombiClient ombi.OmbiClient, posterBasePath string, storage storage.Storage) *Bot {
+func NewBot(tgbot *tgbotapi.BotAPI, ombiClients map[int64]ombi.OmbiClient, posterBasePath string, storage storage.Storage) *Bot {
 	return &Bot{
 		tgbot:          tgbot,
-		ombiClient:     ombiClient,
+		ombiClients:    ombiClients,
 		posterBasePath: posterBasePath,
 		storage:        storage,
 	}
@@ -54,16 +54,22 @@ func (bot *Bot) handle_update(update tgbotapi.Update) {
 		}
 	}()
 
+	var chatID int64
+	var response tgbotapi.Chattable
+	var err error
 	switch {
 	case update.Message != nil:
-		response, err := bot.handle_message(update.Message)
-		bot.send_response(update.Message.Chat.ID, response, err)
+		chatID = update.Message.Chat.ID
+		response, err = bot.handle_message(update.Message)
 	case update.CallbackQuery != nil:
-		response, err := bot.handle_callback(update.CallbackQuery)
-		bot.send_response(update.CallbackQuery.Message.Chat.ID, response, err)
+		chatID = update.CallbackQuery.Message.Chat.ID
+		response, err = bot.handle_callback(update.CallbackQuery)
 	default:
 		log.Printf("Unknown update type: %+v", update)
+		return
 	}
+
+	bot.send_response(chatID, response, err)
 }
 
 func (bot *Bot) send_response(chatID int64, response tgbotapi.Chattable, err error) {
@@ -117,18 +123,23 @@ func (bot *Bot) handle_callback(callbackQuery *tgbotapi.CallbackQuery) (tgbotapi
 	case next:
 		return bot.show_new_result(callbackQuery.Message, results, inline_button_data.Index+1, inline_button_data.ResultsUuid)
 	default:
-		return bot.request_media(callbackQuery.Message, results[inline_button_data.Index])
+		return bot.request_media(callbackQuery, results[inline_button_data.Index])
 	}
 }
 
-func (bot *Bot) request_media(message *tgbotapi.Message, result ombi.MultiSearchResult) (tgbotapi.Chattable, error) {
+func (bot *Bot) request_media(callbackQuery *tgbotapi.CallbackQuery, result ombi.MultiSearchResult) (tgbotapi.Chattable, error) {
 	log.Printf("Requesting %s", result.Title)
 
-	if err := bot.ombiClient.RequestMedia(result); err != nil {
+	client, err := bot.ombi_client_by_user(callbackQuery.From)
+	if err != nil {
 		return nil, err
 	}
 
-	return tgbotapi.NewMessage(message.Chat.ID, "Request sent!"), nil
+	if err := client.RequestMedia(result); err != nil {
+		return nil, err
+	}
+
+	return tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, "Request sent!"), nil
 }
 
 func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiSearchResult, index int, results_uuid uuid.UUID) (tgbotapi.Chattable, error) {
@@ -159,9 +170,23 @@ func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiS
 	return msg, nil
 }
 
+func (bot *Bot) ombi_client_by_user(user *tgbotapi.User) (ombi.OmbiClient, error) {
+	client := bot.ombiClients[user.ID]
+	if client == nil {
+		return nil, fmt.Errorf("no Ombi client for user %s", user.UserName)
+	}
+	return client, nil
+}
+
 func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chattable, error) {
 	log.Printf("Searching for %s", message.Text)
-	result, err := bot.ombiClient.PerformMultiSearch(message.Text)
+
+	client, err := bot.ombi_client_by_user(message.From)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := client.PerformMultiSearch(message.Text)
 	if err != nil {
 		return nil, err
 	}
