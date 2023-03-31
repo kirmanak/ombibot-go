@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/kirmanak/ombibot-go/bot"
-	"github.com/kirmanak/ombibot-go/ombi"
-	"github.com/kirmanak/ombibot-go/storage"
+	"github.com/kirmanak/ombibot-go/app/bot"
+	"github.com/kirmanak/ombibot-go/app/ombi"
+	"github.com/kirmanak/ombibot-go/app/storage"
 	"log"
 	"os"
 	"strconv"
@@ -19,7 +19,7 @@ func main() {
 		log.Fatalf("failed to parse configuration: %s", err)
 	}
 
-	storage, err := storage.NewStorage()
+	storage, err := storage.NewStorage(configuration.DbPath)
 	if err != nil {
 		log.Fatalf("failed to open storage: %s", err)
 	}
@@ -75,10 +75,16 @@ func parse_configuration() (*Configuration, error) {
 		return nil, fmt.Errorf("POSTER_BASE_PATH is not set")
 	}
 
+	db_path := os.Getenv("DB_PATH")
+	if db_path == "" {
+		return nil, fmt.Errorf("DB_PATH is not set")
+	}
+
 	configuration := Configuration{
 		ApiToken:       apiToken,
 		UpdateId:       update_id_int,
 		PosterBasePath: poster_base_path,
+		DbPath:         db_path,
 	}
 
 	log.Printf("Configuration: %+v", configuration)
@@ -90,4 +96,5 @@ type Configuration struct {
 	ApiToken       string
 	UpdateId       int
 	PosterBasePath string
+	DbPath         string
 }

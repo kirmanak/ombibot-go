@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/kirmanak/ombibot-go/ombi"
-	"github.com/kirmanak/ombibot-go/storage"
+	"github.com/kirmanak/ombibot-go/app/ombi"
+	"github.com/kirmanak/ombibot-go/app/storage"
 	"log"
 	"net/http"
 

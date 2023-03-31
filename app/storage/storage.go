@@ -24,8 +24,8 @@ type Sqlite struct {
 	db *sql.DB
 }
 
-func NewStorage() (*Sqlite, error) {
-	db, err := sql.Open("sqlite3", "./ombibot.db")
+func NewStorage(filePath string) (*Sqlite, error) {
+	db, err := sql.Open("sqlite3", filePath)
 	if err != nil {
 		return nil, err
 	}
