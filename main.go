@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/kirmanak/ombibot-go/bot"
 	"github.com/kirmanak/ombibot-go/ombi"
@@ -42,35 +41,35 @@ func main() {
 }
 
 // Parse configuration from environment variables
-func parse_configuration() (Configuration, error) {
+func parse_configuration() (*Configuration, error) {
 	apiToken := os.Getenv("TELEGRAM_APITOKEN")
 	if apiToken == "" {
-		return Configuration{}, errors.New("TELEGRAM_APITOKEN is not set")
+		return nil, fmt.Errorf("TELEGRAM_APITOKEN is not set")
 	}
 
 	update_id := os.Getenv("TELEGRAM_UPDATE_ID")
 	if update_id == "" {
-		return Configuration{ApiToken: apiToken}, errors.New("TELEGRAM_UPDATE_ID is not set")
+		return nil, fmt.Errorf("TELEGRAM_UPDATE_ID is not set")
 	}
 
 	update_id_int, err := strconv.Atoi(update_id)
 	if err != nil {
-		return Configuration{ApiToken: apiToken}, fmt.Errorf("TELEGRAM_UPDATE_ID is not an integer: %w", err)
+		return nil, fmt.Errorf("TELEGRAM_UPDATE_ID is not an integer: %w", err)
 	}
 
 	ombi_url := os.Getenv("OMBI_URL")
 	if ombi_url == "" {
-		return Configuration{ApiToken: apiToken, UpdateId: update_id_int}, errors.New("OMBI_URL is not set")
+		return nil, fmt.Errorf("OMBI_URL is not set")
 	}
 
 	ombi_key := os.Getenv("OMBI_KEY")
 	if ombi_key == "" {
-		return Configuration{ApiToken: apiToken, UpdateId: update_id_int, OmbiUrl: ombi_url}, errors.New("OMBI_KEY is not set")
+		return nil, fmt.Errorf("OMBI_KEY is not set")
 	}
 
 	poster_base_path := os.Getenv("POSTER_BASE_PATH")
 	if poster_base_path == "" {
-		return Configuration{ApiToken: apiToken, UpdateId: update_id_int, OmbiUrl: ombi_url, OmbiKey: ombi_key}, errors.New("POSTER_BASE_PATH is not set")
+		return nil, fmt.Errorf("POSTER_BASE_PATH is not set")
 	}
 
 	configuration := Configuration{
@@ -83,7 +82,7 @@ func parse_configuration() (Configuration, error) {
 
 	log.Printf("Configuration: %+v", configuration)
 
-	return configuration, nil
+	return &configuration, nil
 }
 
 type Configuration struct {

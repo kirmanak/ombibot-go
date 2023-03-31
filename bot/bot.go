@@ -21,12 +21,12 @@ const (
 
 type Bot struct {
 	tgbot          *tgbotapi.BotAPI
-	ombiClient     *ombi.OmbiClient
+	ombiClient     ombi.OmbiClient
 	posterBasePath string
-	storage        *storage.Storage
+	storage        storage.Storage
 }
 
-func NewBot(tgbot *tgbotapi.BotAPI, ombiClient *ombi.OmbiClient, posterBasePath string, storage *storage.Storage) *Bot {
+func NewBot(tgbot *tgbotapi.BotAPI, ombiClient ombi.OmbiClient, posterBasePath string, storage storage.Storage) *Bot {
 	return &Bot{
 		tgbot:          tgbot,
 		ombiClient:     ombiClient,
@@ -43,16 +43,26 @@ func (bot *Bot) Start(fromUpdateId int) {
 	updates := bot.tgbot.GetUpdatesChan(u)
 
 	for update := range updates {
-		switch {
-		case update.Message != nil:
-			response, err := bot.handle_message(update.Message)
-			bot.send_response(update.Message.Chat.ID, response, err)
-		case update.CallbackQuery != nil:
-			response, err := bot.handle_callback(update.CallbackQuery)
-			bot.send_response(update.CallbackQuery.Message.Chat.ID, response, err)
-		default:
-			log.Printf("Unknown update type: %+v", update)
+		go bot.handle_update(update)
+	}
+}
+
+func (bot *Bot) handle_update(update tgbotapi.Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic: %s", r)
 		}
+	}()
+
+	switch {
+	case update.Message != nil:
+		response, err := bot.handle_message(update.Message)
+		bot.send_response(update.Message.Chat.ID, response, err)
+	case update.CallbackQuery != nil:
+		response, err := bot.handle_callback(update.CallbackQuery)
+		bot.send_response(update.CallbackQuery.Message.Chat.ID, response, err)
+	default:
+		log.Printf("Unknown update type: %+v", update)
 	}
 }
 
@@ -62,8 +72,7 @@ func (bot *Bot) send_response(chatID int64, response tgbotapi.Chattable, err err
 		response = tgbotapi.NewMessage(chatID, "Something went wrong. Please, try again later.")
 	}
 
-	_, err = bot.tgbot.Send(response)
-	if err != nil {
+	if _, err = bot.tgbot.Send(response); err != nil {
 		log.Printf("Error: %s", fmt.Errorf("failed to send response: %w", err))
 	}
 }
@@ -88,9 +97,8 @@ func (bot *Bot) handle_callback(callbackQuery *tgbotapi.CallbackQuery) (tgbotapi
 	bot.tgbot.Send(tgbotapi.NewCallback(callbackQuery.ID, ""))
 
 	var inline_button_data InlineButtonData
-	err := json.Unmarshal([]byte(callbackQuery.Data), &inline_button_data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal inline button data: %s", err)
+	if err := json.Unmarshal([]byte(callbackQuery.Data), &inline_button_data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal inline button data: %w", err)
 	}
 
 	results_json, err := bot.storage.GetSearchResults(inline_button_data.ResultsUuid.String())
@@ -99,9 +107,8 @@ func (bot *Bot) handle_callback(callbackQuery *tgbotapi.CallbackQuery) (tgbotapi
 	}
 
 	var results []ombi.MultiSearchResult
-	err = json.Unmarshal([]byte(results_json), &results)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal results: %s", err)
+	if err = json.Unmarshal([]byte(results_json), &results); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal results: %w", err)
 	}
 
 	switch inline_button_data.InlineButtonType {
@@ -117,8 +124,7 @@ func (bot *Bot) handle_callback(callbackQuery *tgbotapi.CallbackQuery) (tgbotapi
 func (bot *Bot) request_media(message *tgbotapi.Message, result ombi.MultiSearchResult) (tgbotapi.Chattable, error) {
 	log.Printf("Requesting %s", result.Title)
 
-	err := bot.ombiClient.RequestMedia(result)
-	if err != nil {
+	if err := bot.ombiClient.RequestMedia(result); err != nil {
 		return nil, err
 	}
 
@@ -143,8 +149,12 @@ func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiS
 		Media: photo,
 	}
 
-	markup := create_reply_markup(index, results_uuid, len(results))
-	msg.ReplyMarkup = &markup
+	markup, err := create_reply_markup(index, results_uuid, len(results))
+	if err != nil {
+		return nil, err
+	}
+
+	msg.ReplyMarkup = markup
 
 	return msg, nil
 }
@@ -175,8 +185,7 @@ func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chatt
 
 	results_uuid := uuid.New()
 
-	err = bot.storage.SaveSearchResults(results_uuid.String(), string(results_json))
-	if err != nil {
+	if err = bot.storage.SaveSearchResults(results_uuid.String(), string(results_json)); err != nil {
 		return nil, err
 	}
 
@@ -185,29 +194,44 @@ func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chatt
 		return nil, err
 	}
 
+	markup, err := create_reply_markup(0, results_uuid, len(filtered_result))
+	if err != nil {
+		return nil, err
+	}
+
 	photo_message := tgbotapi.NewPhoto(message.Chat.ID, photoReader)
 	photo_message.Caption = caption(filtered_result[0])
-	photo_message.ReplyMarkup = create_reply_markup(0, results_uuid, len(filtered_result))
+	photo_message.ReplyMarkup = markup
 
 	return photo_message, nil
 }
 
-func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) tgbotapi.InlineKeyboardMarkup {
+func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) (*tgbotapi.InlineKeyboardMarkup, error) {
 	var inline_keyboard_row []tgbotapi.InlineKeyboardButton
 	if index > 0 {
-		inline_keyboard_row = append(inline_keyboard_row,
-			tgbotapi.NewInlineKeyboardButtonData("Previous", new_inline_button_data(previous, index, results_uuid)),
-		)
+		data, err := new_inline_button_data(previous, index, results_uuid)
+		if err != nil {
+			return nil, err
+		}
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Previous", data))
 	}
-	inline_keyboard_row = append(inline_keyboard_row,
-		tgbotapi.NewInlineKeyboardButtonData("Request", new_inline_button_data(request, index, results_uuid)),
-	)
+
+	data, err := new_inline_button_data(request, index, results_uuid)
+	if err != nil {
+		return nil, err
+	}
+	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Request", data))
+
 	if index < results_size-1 {
-		inline_keyboard_row = append(inline_keyboard_row,
-			tgbotapi.NewInlineKeyboardButtonData("Next", new_inline_button_data(next, index, results_uuid)),
-		)
+		data, err := new_inline_button_data(next, index, results_uuid)
+		if err != nil {
+			return nil, err
+		}
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Next", data))
 	}
-	return tgbotapi.NewInlineKeyboardMarkup(inline_keyboard_row)
+
+	markup := tgbotapi.NewInlineKeyboardMarkup(inline_keyboard_row)
+	return &markup, nil
 }
 
 func (bot *Bot) load_poster(posterPath string) (*tgbotapi.FileReader, error) {
@@ -223,14 +247,17 @@ func (bot *Bot) load_poster(posterPath string) (*tgbotapi.FileReader, error) {
 	}, nil
 }
 
-func new_inline_button_data(inlineButtonType InlineButtonType, index int, results_uuid uuid.UUID) string {
+func new_inline_button_data(inlineButtonType InlineButtonType, index int, results_uuid uuid.UUID) (string, error) {
 	data := InlineButtonData{
 		InlineButtonType: inlineButtonType,
 		Index:            index,
 		ResultsUuid:      results_uuid,
 	}
-	json, _ := json.Marshal(data)
-	return string(json)
+	json, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal inline button data: %w", err)
+	}
+	return string(json), nil
 }
 
 func caption(result ombi.MultiSearchResult) string {

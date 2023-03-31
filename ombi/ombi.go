@@ -10,19 +10,24 @@ import (
 	"strconv"
 )
 
-type OmbiClient struct {
+type OmbiClient interface {
+	PerformMultiSearch(query string) ([]MultiSearchResult, error)
+	RequestMedia(result MultiSearchResult) error
+}
+
+type SimpleOmbiClient struct {
 	url string
 	key string
 }
 
-func NewOmbiClient(url string, key string) *OmbiClient {
-	return &OmbiClient{
+func NewOmbiClient(url string, key string) *SimpleOmbiClient {
+	return &SimpleOmbiClient{
 		url: url,
 		key: key,
 	}
 }
 
-func (client *OmbiClient) PerformMultiSearch(query string) ([]MultiSearchResult, error) {
+func (client *SimpleOmbiClient) PerformMultiSearch(query string) ([]MultiSearchResult, error) {
 	searchRequest := &MulitSearchRequest{
 		Movies:  true,
 		TvShows: true,
@@ -46,7 +51,7 @@ func (client *OmbiClient) PerformMultiSearch(query string) ([]MultiSearchResult,
 	log.Printf("Response status: %s, response body: %s", resp.Status, string(body))
 
 	if (resp.StatusCode < 200) || (resp.StatusCode >= 300) {
-		return nil, fmt.Errorf("got non-2xx response status: %s", resp.Status)
+		return nil, fmt.Errorf("got non-2xx response status: " + resp.Status)
 	}
 
 	var result []MultiSearchResult
@@ -57,7 +62,7 @@ func (client *OmbiClient) PerformMultiSearch(query string) ([]MultiSearchResult,
 	return result, nil
 }
 
-func (client *OmbiClient) RequestMedia(result MultiSearchResult) error {
+func (client *SimpleOmbiClient) RequestMedia(result MultiSearchResult) error {
 	request_body, err := create_request_body(result)
 	if err != nil {
 		return fmt.Errorf("can't create request body for %+v: %w", result, err)
@@ -83,7 +88,7 @@ func (client *OmbiClient) RequestMedia(result MultiSearchResult) error {
 	log.Printf("Response status: %s, response body: %s", resp.Status, string(body))
 
 	if (resp.StatusCode < 200) || (resp.StatusCode >= 300) {
-		return fmt.Errorf("got non-2xx response status: %s", resp.Status)
+		return fmt.Errorf("got non-2xx response status: " + resp.Status)
 	}
 
 	var response MediaRequestResult
@@ -92,7 +97,7 @@ func (client *OmbiClient) RequestMedia(result MultiSearchResult) error {
 	}
 
 	if response.IsError {
-		return fmt.Errorf("got error response: %s", response.ErrorMessage)
+		return fmt.Errorf("got error response: " + response.ErrorMessage)
 	}
 
 	return nil
@@ -104,7 +109,7 @@ func get_media_request_path(result MultiSearchResult) (string, error) {
 	} else if result.MediaType == "tv" {
 		return "api/v2/Requests/tv", nil
 	} else {
-		return "", fmt.Errorf("unknown media type %s", result.MediaType)
+		return "", fmt.Errorf("unknown media type " + result.MediaType)
 	}
 }
 
@@ -121,7 +126,7 @@ func create_request_body(result MultiSearchResult) (any, error) {
 	return request, nil
 }
 
-func (client *OmbiClient) post(path string, body any) (*http.Response, error) {
+func (client *SimpleOmbiClient) post(path string, body any) (*http.Response, error) {
 	requestBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("can't encode JSON request %+v: %w", body, err)
@@ -140,7 +145,7 @@ func (client *OmbiClient) post(path string, body any) (*http.Response, error) {
 	return client.doRequest(request)
 }
 
-func (client *OmbiClient) doRequest(req *http.Request) (*http.Response, error) {
+func (client *SimpleOmbiClient) doRequest(req *http.Request) (*http.Response, error) {
 	req.Header.Set("ApiKey", client.key)
 	return http.DefaultClient.Do(req)
 }
