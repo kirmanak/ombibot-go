@@ -36,27 +36,10 @@ func (client *SimpleOmbiClient) PerformMultiSearch(query string) ([]MultiSearchR
 	}
 	url := "api/v2/Search/multi/" + query
 
-	resp, err := client.post(url, searchRequest)
+	var result []MultiSearchResult
+	err := client.post(url, searchRequest, &result)
 	if err != nil {
 		return nil, fmt.Errorf("can't request %s from client %+v: %w", url, client, err)
-	}
-
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("can't read response body: %w", err)
-	}
-
-	log.Printf("Response status: %s, response body: %s", resp.Status, string(body))
-
-	if (resp.StatusCode < 200) || (resp.StatusCode >= 300) {
-		return nil, fmt.Errorf("got non-2xx response status: " + resp.Status)
-	}
-
-	var result []MultiSearchResult
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("can't decode JSON response: %w", err)
 	}
 
 	return result, nil
@@ -73,27 +56,10 @@ func (client *SimpleOmbiClient) RequestMedia(result MultiSearchResult) error {
 		return err
 	}
 
-	resp, err := client.post(request_path, request_body)
+	var response MediaRequestResult
+	err = client.post(request_path, request_body, &response)
 	if err != nil {
 		return fmt.Errorf("can't request %s from client %+v: %w", request_path, client, err)
-	}
-
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("can't read response body: %w", err)
-	}
-
-	log.Printf("Response status: %s, response body: %s", resp.Status, string(body))
-
-	if (resp.StatusCode < 200) || (resp.StatusCode >= 300) {
-		return fmt.Errorf("got non-2xx response status: " + resp.Status)
-	}
-
-	var response MediaRequestResult
-	if err := json.Unmarshal(body, &response); err != nil {
-		return fmt.Errorf("can't decode JSON response: %w", err)
 	}
 
 	if response.IsError {
@@ -113,7 +79,7 @@ func get_media_request_path(result MultiSearchResult) (string, error) {
 	}
 }
 
-func create_request_body(result MultiSearchResult) (any, error) {
+func create_request_body(result MultiSearchResult) (*MediaRequest, error) {
 	dbId, err := strconv.Atoi(result.Id)
 	if err != nil {
 		return nil, fmt.Errorf("can't convert %s to int: %w", result.Id, err)
@@ -126,23 +92,45 @@ func create_request_body(result MultiSearchResult) (any, error) {
 	return request, nil
 }
 
-func (client *SimpleOmbiClient) post(path string, body any) (*http.Response, error) {
-	requestBody, err := json.Marshal(body)
+func (client *SimpleOmbiClient) post(path string, request any, response any) error {
+	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("can't encode JSON request %+v: %w", body, err)
+		return fmt.Errorf("can't encode JSON request %+v: %w", request, err)
 	}
 
 	url := fmt.Sprintf("%s/%s", client.url, path)
 
-	request, err := http.NewRequest("POST", url, bytes.NewReader(requestBody))
+	httpRequest, err := http.NewRequest("POST", url, bytes.NewReader(requestBody))
 	if err != nil {
-		return nil, fmt.Errorf("can't create POST request %s from client %+v: %w", url, client, err)
+		return fmt.Errorf("can't create POST request %s from client %+v: %w", url, client, err)
 	}
-	request.Header.Set("Content-Type", "application/json")
 
 	log.Printf("POST %s with body %s", url, string(requestBody))
 
-	return client.doRequest(request)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	resp, err := client.doRequest(httpRequest)
+	if err != nil {
+		return fmt.Errorf("can't request %s from client %+v: %w", url, client, err)
+	}
+
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("can't read response body: %w", err)
+	}
+
+	log.Printf("Response status: %s, response body: %s", resp.Status, string(responseBody))
+
+	if (resp.StatusCode < 200) || (resp.StatusCode >= 300) {
+		return fmt.Errorf("got non-2xx response status: " + resp.Status)
+	}
+
+	if err := json.Unmarshal(responseBody, response); err != nil {
+		return fmt.Errorf("can't decode JSON response: %w", err)
+	}
+
+	return nil
 }
 
 func (client *SimpleOmbiClient) doRequest(req *http.Request) (*http.Response, error) {
