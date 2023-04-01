@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -75,7 +74,7 @@ func (bot *Bot) handle_update(update tgbotapi.Update) {
 func (bot *Bot) send_response(chatID int64, response tgbotapi.Chattable, err error) {
 	if err != nil {
 		log.Printf("Error: %s", err)
-		response = tgbotapi.NewMessage(chatID, "Something went wrong. Please, try again later.")
+		response = tgbotapi.NewMessage(chatID, "There was an error: "+err.Error())
 	}
 
 	if _, err = bot.tgbot.Send(response); err != nil {
@@ -139,7 +138,7 @@ func (bot *Bot) request_media(callbackQuery *tgbotapi.CallbackQuery, result ombi
 		return nil, err
 	}
 
-	return tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, "Request sent!"), nil
+	return tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, "Successfully requested "+result.Title), nil
 }
 
 func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiSearchResult, index int, results_uuid uuid.UUID) (tgbotapi.Chattable, error) {
@@ -152,6 +151,7 @@ func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiS
 
 	photo := tgbotapi.NewInputMediaPhoto(photoReader)
 	photo.Caption = caption(result)
+	photo.CaptionEntities = caption_entities(result)
 	msg := tgbotapi.EditMessageMediaConfig{
 		BaseEdit: tgbotapi.BaseEdit{
 			ChatID:    message.Chat.ID,
@@ -226,6 +226,7 @@ func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chatt
 
 	photo_message := tgbotapi.NewPhoto(message.Chat.ID, photoReader)
 	photo_message.Caption = caption(filtered_result[0])
+	photo_message.CaptionEntities = caption_entities(filtered_result[0])
 	photo_message.ReplyMarkup = markup
 
 	return photo_message, nil
@@ -287,6 +288,16 @@ func new_inline_button_data(inlineButtonType InlineButtonType, index int, result
 
 func caption(result ombi.MultiSearchResult) string {
 	return fmt.Sprintf("%s\n%s", result.Title, result.Overview)
+}
+
+func caption_entities(result ombi.MultiSearchResult) []tgbotapi.MessageEntity {
+	return []tgbotapi.MessageEntity{
+		{
+			Type:   "bold",
+			Offset: 0,
+			Length: len(result.Title),
+		},
+	}
 }
 
 type InlineButtonData struct {
