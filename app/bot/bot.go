@@ -241,21 +241,41 @@ func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) (*
 		if err != nil {
 			return nil, err
 		}
-		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Previous", data))
+		var previous_index int
+		if index == 0 {
+			previous_index = results_size
+		} else {
+			previous_index = index
+		}
+		message := fmt.Sprintf("Previous [%d/%d]", previous_index, results_size)
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 	}
 
 	data, err := new_inline_button_data(request, index, results_uuid)
 	if err != nil {
 		return nil, err
 	}
-	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Request", data))
+	var message string
+	if results_size == 1 {
+		message = "Request"
+	} else {
+		message = fmt.Sprintf("Request [%d/%d]", index+1, results_size)
+	}
+	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 
 	if results_size > 1 {
 		data, err := new_inline_button_data(next, index, results_uuid)
 		if err != nil {
 			return nil, err
 		}
-		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Next", data))
+		var next_index int
+		if index == results_size-1 {
+			next_index = 1
+		} else {
+			next_index = index + 2
+		}
+		message := fmt.Sprintf("Next [%d/%d]", next_index, results_size)
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 	}
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(inline_keyboard_row)
