@@ -142,7 +142,9 @@ func (bot *Bot) request_media(callbackQuery *tgbotapi.CallbackQuery, result ombi
 }
 
 func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiSearchResult, index int, results_uuid uuid.UUID) (tgbotapi.Chattable, error) {
-	result := results[index]
+	results_size := len(results)
+	real_index := (results_size + index) % results_size
+	result := results[real_index]
 
 	photoReader, err := bot.load_poster(result.Poster)
 	if err != nil {
@@ -160,7 +162,7 @@ func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiS
 		Media: photo,
 	}
 
-	markup, err := create_reply_markup(index, results_uuid, len(results))
+	markup, err := create_reply_markup(real_index, results_uuid, len(results))
 	if err != nil {
 		return nil, err
 	}
@@ -234,26 +236,46 @@ func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chatt
 
 func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) (*tgbotapi.InlineKeyboardMarkup, error) {
 	var inline_keyboard_row []tgbotapi.InlineKeyboardButton
-	if index > 0 {
+	if results_size > 1 {
 		data, err := new_inline_button_data(previous, index, results_uuid)
 		if err != nil {
 			return nil, err
 		}
-		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Previous", data))
+		var previous_index int
+		if index == 0 {
+			previous_index = results_size
+		} else {
+			previous_index = index
+		}
+		message := fmt.Sprintf("Previous [%d/%d]", previous_index, results_size)
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 	}
 
 	data, err := new_inline_button_data(request, index, results_uuid)
 	if err != nil {
 		return nil, err
 	}
-	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Request", data))
+	var message string
+	if results_size == 1 {
+		message = "Request"
+	} else {
+		message = fmt.Sprintf("Request [%d/%d]", index+1, results_size)
+	}
+	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 
-	if index < results_size-1 {
+	if results_size > 1 {
 		data, err := new_inline_button_data(next, index, results_uuid)
 		if err != nil {
 			return nil, err
 		}
-		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Next", data))
+		var next_index int
+		if index == results_size-1 {
+			next_index = 1
+		} else {
+			next_index = index + 2
+		}
+		message := fmt.Sprintf("Next [%d/%d]", next_index, results_size)
+		inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData(message, data))
 	}
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(inline_keyboard_row)
