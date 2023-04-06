@@ -142,7 +142,9 @@ func (bot *Bot) request_media(callbackQuery *tgbotapi.CallbackQuery, result ombi
 }
 
 func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiSearchResult, index int, results_uuid uuid.UUID) (tgbotapi.Chattable, error) {
-	result := results[index]
+	results_size := len(results)
+	real_index := (results_size + index) % results_size
+	result := results[real_index]
 
 	photoReader, err := bot.load_poster(result.Poster)
 	if err != nil {
@@ -160,7 +162,7 @@ func (bot *Bot) show_new_result(message *tgbotapi.Message, results []ombi.MultiS
 		Media: photo,
 	}
 
-	markup, err := create_reply_markup(index, results_uuid, len(results))
+	markup, err := create_reply_markup(real_index, results_uuid, len(results))
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +236,7 @@ func (bot *Bot) handle_search_request(message *tgbotapi.Message) (tgbotapi.Chatt
 
 func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) (*tgbotapi.InlineKeyboardMarkup, error) {
 	var inline_keyboard_row []tgbotapi.InlineKeyboardButton
-	if index > 0 {
+	if results_size > 1 {
 		data, err := new_inline_button_data(previous, index, results_uuid)
 		if err != nil {
 			return nil, err
@@ -248,7 +250,7 @@ func create_reply_markup(index int, results_uuid uuid.UUID, results_size int) (*
 	}
 	inline_keyboard_row = append(inline_keyboard_row, tgbotapi.NewInlineKeyboardButtonData("Request", data))
 
-	if index < results_size-1 {
+	if results_size > 1 {
 		data, err := new_inline_button_data(next, index, results_uuid)
 		if err != nil {
 			return nil, err
