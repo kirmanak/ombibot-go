@@ -1,5 +1,7 @@
 FROM --platform=${BUILDPLATFORM} golang:1.20 AS build
 
+RUN apt install build-essential
+
 ARG TARGETOS
 ARG TARGETARCH
 
