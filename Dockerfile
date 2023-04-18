@@ -12,8 +12,7 @@ COPY go.sum ./
 COPY app ./app
 COPY vendor ./vendor
 
-ENV CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} 
-RUN go build -tags "${TARGETOS} ${TARGETARCH}" -C app -o /ombibot
+RUN  CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -C app -o /ombibot
 
 FROM --platform=${TARGETPLATFORM} gcr.io/distroless/base-debian10
 
