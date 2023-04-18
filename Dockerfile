@@ -9,7 +9,9 @@ COPY go.sum ./
 COPY app ./app
 COPY vendor ./vendor
 
-RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -C app -o /ombibot
+RUN export GOOS=$(echo ${TARGETPLATFORM} | cut -d / -f1) && \
+    export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
+    go build -C app -o /ombibot
 
 FROM --platform=${TARGETPLATFORM} gcr.io/distroless/base-debian10
 
