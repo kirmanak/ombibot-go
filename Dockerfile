@@ -5,12 +5,11 @@ ARG TARGETARCH
 
 WORKDIR /app
 
-RUN mkdir app vendor
+RUN mkdir app
 
 COPY go.mod ./
 COPY go.sum ./
 COPY app ./app
-COPY vendor ./vendor
 
 RUN  CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -C app -o /ombibot
 
