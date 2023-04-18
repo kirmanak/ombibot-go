@@ -1,4 +1,4 @@
-FROM golang:1.20 AS build
+FROM --platform=${BUILDPLATFORM} golang:1.20 AS build
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY vendor ./vendor
 
 RUN go build -C app -o /ombibot
 
-FROM gcr.io/distroless/base-debian10
+FROM --platform=${TARGETPLATFORM} gcr.io/distroless/base-debian10
 
 WORKDIR /
 
