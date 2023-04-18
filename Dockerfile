@@ -1,7 +1,5 @@
 FROM --platform=${BUILDPLATFORM} golang:1.20 AS build
 
-RUN apt install build-essential
-
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -14,7 +12,7 @@ COPY go.sum ./
 COPY app ./app
 COPY vendor ./vendor
 
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -C app -o /ombibot
+RUN CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -C app -o /ombibot
 
 FROM --platform=${TARGETPLATFORM} gcr.io/distroless/base-debian10
 
